@@ -1,0 +1,38 @@
+max_availability_zones: 3
+
+create_hosted_zone: false
+manage_ns_records: true
+
+
+ip_blocks:
+  public:
+    - 0.0.0.0/0
+  vpn:
+    - 10.150.0.0/16
+  base2:
+    - 52.64.86.162/32
+    - 54.191.24.202/32
+
+config_export:
+  global:
+    - dns_domain
+    - ip_blocks
+    - max_availability_zones
+    - create_hosted_zone
+    - manage_ns_records
+
+components:
+  vpc:
+    config:
+      dns_format: ${EnvironmentName}.${RootDomainName}
+      dns_domain:
+        Fn::Join: 
+          - ''
+          - - Ref: EnvironmentName
+            - '.'
+            - Ref: RootDomainName
+            - '.'
+  dns:
+    config:
+      disable_custom_resources: true
+      manage_ns_records: false

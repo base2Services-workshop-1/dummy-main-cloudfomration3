@@ -1,0 +1,24 @@
+name: compile-cloudformation
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'stacks/**'
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    container: 
+      image: theonestack/cfhighlander:latest
+      options: --user 1001 # this user is required as this is the uid used by the checkout step
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.head_ref }}
+        fetch-depth: 0
+    - run: make build
+    - uses: EndBug/add-and-commit@v9
+      with:
+        message: adds compiled cloudformation templates
+        default_author: github_actions
+        add: stacks/
