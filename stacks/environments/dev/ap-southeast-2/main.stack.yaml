@@ -1,0 +1,11 @@
+template-file-path: ./stacks/templates/main.compiled.yaml
+
+parameters:
+  EnvironmentName: dev-git-sync-demo
+  EnvironmentType: development
+  vpcCIDR: 10.111.0.0/16
+  MaxNatGateways: 1
+
+tags:
+  cost-center: 'aaron'
+  org: 'reference'
