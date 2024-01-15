@@ -1,0 +1,2303 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock:
+        Ref: vpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: "${EnvironmentName}-vpc"
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  DHCPOptionSet:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      DomainName:
+        Fn::Sub: "${EnvironmentName}.${RootDomainName}"
+      DomainNameServers:
+      - AmazonProvidedDNS
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: "${EnvironmentName}-vpc"
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  DHCPOptionsAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      VpcId:
+        Ref: VPC
+      DhcpOptionsId:
+        Ref: DHCPOptionSet
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: "${EnvironmentName}-vpc"
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: VPC
+      InternetGatewayId:
+        Ref: InternetGateway
+  RouteTablePublic:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: "${EnvironmentName}-public"
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  NetworkAclPublic:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: "${EnvironmentName}-public"
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  NetworkAclPrivate:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: "${EnvironmentName}-private"
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  PublicRouteOutToInternet:
+    Type: AWS::EC2::Route
+    DependsOn:
+    - AttachGateway
+    Properties:
+      RouteTableId:
+        Ref: RouteTablePublic
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+  NaclRuleInboundPublic100:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NetworkAclPublic
+      RuleNumber: 100
+      Protocol: '6'
+      RuleAction: allow
+      Egress: false
+      CidrBlock: 0.0.0.0/0
+      PortRange:
+        From: 80
+        To: 80
+  NaclRuleInboundPublic150:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NetworkAclPublic
+      RuleNumber: 150
+      Protocol: '6'
+      RuleAction: allow
+      Egress: false
+      CidrBlock: 0.0.0.0/0
+      PortRange:
+        From: 443
+        To: 443
+  NaclRuleInboundPublic200:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NetworkAclPublic
+      RuleNumber: 200
+      Protocol: '6'
+      RuleAction: allow
+      Egress: false
+      CidrBlock: 0.0.0.0/0
+      PortRange:
+        From: 1024
+        To: 65535
+  NaclRuleInboundPrivate100:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NetworkAclPrivate
+      RuleNumber: 100
+      Protocol: -1
+      RuleAction: allow
+      Egress: false
+      CidrBlock: 0.0.0.0/0
+  NaclRuleOutboundPrivate100:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NetworkAclPrivate
+      RuleNumber: 100
+      Protocol: -1
+      RuleAction: allow
+      Egress: true
+      CidrBlock: 0.0.0.0/0
+  NaclRuleOutboundPublic100:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId:
+        Ref: NetworkAclPublic
+      RuleNumber: 100
+      Protocol: -1
+      RuleAction: allow
+      Egress: true
+      CidrBlock: 0.0.0.0/0
+  NatInstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: NatInstance
+    Properties:
+      VpcId:
+        Ref: VPC
+      GroupDescription:
+        Fn::Sub: "${EnvironmentName} NAT Instances"
+      SecurityGroupIngress:
+      - CidrIp:
+          Fn::GetAtt:
+          - VPC
+          - CidrBlock
+        Description: inbound all for ports from vpc cidr
+        IpProtocol: -1
+      SecurityGroupEgress:
+      - CidrIp: 0.0.0.0/0
+        Description: outbound all for ports
+        IpProtocol: -1
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: "${EnvironmentName}-vpc"
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  NatInstanceRole:
+    Type: AWS::IAM::Role
+    Condition: NatInstance
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+          Action: sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: eni-attach
+        PolicyDocument:
+          Statement:
+          - Sid: eniattach
+            Action: ec2:AttachNetworkInterface
+            Resource:
+            - "*"
+            Effect: Allow
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+  NatInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Condition: NatInstance
+    Properties:
+      Path: "/"
+      Roles:
+      - Ref: NatInstanceRole
+  RouteTablePrivate0:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-private-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 0
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  NatIPAddress0:
+    Type: AWS::EC2::EIP
+    Condition: CreateNatGatewayEIP0
+    DependsOn:
+    - AttachGateway
+    Properties:
+      Domain: vpc
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-nat-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 0
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  NatGateway0:
+    Type: AWS::EC2::NatGateway
+    Condition: CreateManagedNat0
+    Properties:
+      AllocationId:
+        Fn::If:
+        - CreateNatGatewayEIP
+        - Fn::GetAtt:
+          - NatIPAddress0
+          - AllocationId
+        - Fn::Select:
+          - 0
+          - Fn::Split:
+            - ","
+            - Ref: NatGatewayEIPs
+      SubnetId:
+        Ref: SubnetPublic0
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-natgw-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 0
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  RouteOutToInternet0:
+    Type: AWS::EC2::Route
+    Condition: CreateManagedNatRoute0
+    Properties:
+      RouteTableId:
+        Ref: RouteTablePrivate0
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Fn::If:
+        - CreateManagedNat0
+        - Ref: NatGateway0
+        - Ref: NatGateway0
+  NetworkInterface0:
+    Type: AWS::EC2::NetworkInterface
+    Condition: CreateNatInstance0
+    Properties:
+      SubnetId:
+        Ref: SubnetPublic0
+      SourceDestCheck: false
+      GroupSet:
+      - Ref: NatInstanceSecurityGroup
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-nat-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 0
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  EIPAssociation0:
+    Type: AWS::EC2::EIPAssociation
+    Condition: CreateNatInstance0
+    Properties:
+      AllocationId:
+        Fn::If:
+        - CreateNatGatewayEIP
+        - Fn::GetAtt:
+          - NatIPAddress0
+          - AllocationId
+        - Fn::Select:
+          - 0
+          - Fn::Split:
+            - ","
+            - Ref: NatGatewayEIPs
+      NetworkInterfaceId:
+        Ref: NetworkInterface0
+  LaunchTemplate0:
+    Type: AWS::EC2::LaunchTemplate
+    Condition: CreateNatInstance0
+    Properties:
+      LaunchTemplateData:
+        TagSpecifications:
+        - ResourceType: instance
+          Tags:
+          - Key: Name
+            Value:
+              Fn::Sub:
+              - "${EnvironmentName}-nat-${AZ}"
+              - AZ:
+                  Fn::Select:
+                  - 0
+                  - Fn::GetAZs:
+                      Ref: AWS::Region
+          - Key: EnvironmentType
+            Value:
+              Ref: EnvironmentType
+          - Key: Environment
+            Value:
+              Ref: EnvironmentName
+        - ResourceType: volume
+          Tags:
+          - Key: Name
+            Value:
+              Fn::Sub:
+              - "${EnvironmentName}-nat-${AZ}"
+              - AZ:
+                  Fn::Select:
+                  - 0
+                  - Fn::GetAZs:
+                      Ref: AWS::Region
+          - Key: EnvironmentType
+            Value:
+              Ref: EnvironmentType
+          - Key: Environment
+            Value:
+              Ref: EnvironmentName
+        ImageId: "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs"
+        InstanceType: t3.nano
+        UserData:
+          Fn::Base64:
+            Fn::Sub: |
+              #!/bin/bash
+              INSTANCE_ID=$(curl http://169.254.169.254/2014-11-05/meta-data/instance-id -s)
+              aws ec2 attach-network-interface --instance-id $INSTANCE_ID --network-interface-id ${NetworkInterface0} --device-index 1 --region ${AWS::Region}
+              /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource LaunchTemplate0 --region ${AWS::Region}
+              systemctl disable postfix
+              systemctl stop postfix
+              systemctl enable snat
+              systemctl start snat
+        IamInstanceProfile:
+          Name:
+            Ref: NatInstanceProfile
+        NetworkInterfaces:
+        - DeviceIndex: 0
+          AssociatePublicIpAddress: true
+          Groups:
+          - Ref: NatInstanceSecurityGroup
+        InstanceMarketOptions:
+          Fn::If:
+          - SpotEnabled
+          - MarketType: spot
+            SpotOptions:
+              SpotInstanceType: one-time
+          - Ref: AWS::NoValue
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          default:
+          - setup
+        setup:
+          files:
+            "/opt/snat.sh":
+              mode: '000755'
+              owner: root
+              group: root
+              content: |
+                #!/bin/bash -x
+
+                # wait for eth1
+                while ! ip link show dev eth1; do
+                  sleep 1
+                done
+
+                # enable IP forwarding and NAT
+                sysctl -q -w net.ipv4.ip_forward=1
+                sysctl -q -w net.ipv4.conf.eth1.send_redirects=0
+                iptables -t nat -A POSTROUTING -o eth1 -j MASQUERADE
+
+                # switch the default route to eth1
+                ip route del default dev eth0
+
+                # wait for network connection
+                curl --retry 10 http://www.example.com
+
+                # reestablish connections
+                systemctl restart amazon-ssm-agent.service
+            "/etc/systemd/system/snat.service":
+              mode: '000644'
+              owner: root
+              group: root
+              content: |
+                [Unit]
+                Description = SNAT via ENI eth1
+
+                [Service]
+                ExecStart = /opt/snat.sh
+                Type = oneshot
+
+                [Install]
+                WantedBy = multi-user.target
+  AutoScaleGroup0:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: CreateNatInstance0
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: '1'
+        MinInstancesInService: 0
+        SuspendProcesses:
+        - HealthCheck
+        - ReplaceUnhealthy
+        - AZRebalance
+        - AlarmNotification
+        - ScheduledActions
+      AutoScalingScheduledAction:
+        IgnoreUnmodifiedGroupSizeProperties: true
+    Properties:
+      DesiredCapacity: '1'
+      MinSize: '1'
+      MaxSize: '1'
+      VPCZoneIdentifier:
+      - Ref: SubnetPublic0
+      LaunchTemplate:
+        LaunchTemplateId:
+          Ref: LaunchTemplate0
+        Version:
+          Fn::GetAtt:
+          - LaunchTemplate0
+          - LatestVersionNumber
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-nat-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 0
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+        PropagateAtLaunch: false
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+        PropagateAtLaunch: false
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+        PropagateAtLaunch: false
+  RouteOutToInternet0ViaNatInstance:
+    Type: AWS::EC2::Route
+    Condition: CreateNatInstanceRoute0
+    Properties:
+      RouteTableId:
+        Ref: RouteTablePrivate0
+      DestinationCidrBlock: 0.0.0.0/0
+      NetworkInterfaceId:
+        Fn::If:
+        - CreateNatInstance0
+        - Ref: NetworkInterface0
+        - Ref: NetworkInterface0
+  RouteTablePrivate1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-private-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 1
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  NatIPAddress1:
+    Type: AWS::EC2::EIP
+    Condition: CreateNatGatewayEIP1
+    DependsOn:
+    - AttachGateway
+    Properties:
+      Domain: vpc
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-nat-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 1
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Condition: CreateManagedNat1
+    Properties:
+      AllocationId:
+        Fn::If:
+        - CreateNatGatewayEIP
+        - Fn::GetAtt:
+          - NatIPAddress1
+          - AllocationId
+        - Fn::Select:
+          - 1
+          - Fn::Split:
+            - ","
+            - Ref: NatGatewayEIPs
+      SubnetId:
+        Ref: SubnetPublic1
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-natgw-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 1
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  RouteOutToInternet1:
+    Type: AWS::EC2::Route
+    Condition: CreateManagedNatRoute1
+    Properties:
+      RouteTableId:
+        Ref: RouteTablePrivate1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Fn::If:
+        - CreateManagedNat1
+        - Ref: NatGateway1
+        - Ref: NatGateway0
+  NetworkInterface1:
+    Type: AWS::EC2::NetworkInterface
+    Condition: CreateNatInstance1
+    Properties:
+      SubnetId:
+        Ref: SubnetPublic1
+      SourceDestCheck: false
+      GroupSet:
+      - Ref: NatInstanceSecurityGroup
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-nat-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 1
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  EIPAssociation1:
+    Type: AWS::EC2::EIPAssociation
+    Condition: CreateNatInstance1
+    Properties:
+      AllocationId:
+        Fn::If:
+        - CreateNatGatewayEIP
+        - Fn::GetAtt:
+          - NatIPAddress1
+          - AllocationId
+        - Fn::Select:
+          - 1
+          - Fn::Split:
+            - ","
+            - Ref: NatGatewayEIPs
+      NetworkInterfaceId:
+        Ref: NetworkInterface1
+  LaunchTemplate1:
+    Type: AWS::EC2::LaunchTemplate
+    Condition: CreateNatInstance1
+    Properties:
+      LaunchTemplateData:
+        TagSpecifications:
+        - ResourceType: instance
+          Tags:
+          - Key: Name
+            Value:
+              Fn::Sub:
+              - "${EnvironmentName}-nat-${AZ}"
+              - AZ:
+                  Fn::Select:
+                  - 1
+                  - Fn::GetAZs:
+                      Ref: AWS::Region
+          - Key: EnvironmentType
+            Value:
+              Ref: EnvironmentType
+          - Key: Environment
+            Value:
+              Ref: EnvironmentName
+        - ResourceType: volume
+          Tags:
+          - Key: Name
+            Value:
+              Fn::Sub:
+              - "${EnvironmentName}-nat-${AZ}"
+              - AZ:
+                  Fn::Select:
+                  - 1
+                  - Fn::GetAZs:
+                      Ref: AWS::Region
+          - Key: EnvironmentType
+            Value:
+              Ref: EnvironmentType
+          - Key: Environment
+            Value:
+              Ref: EnvironmentName
+        ImageId: "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs"
+        InstanceType: t3.nano
+        UserData:
+          Fn::Base64:
+            Fn::Sub: |
+              #!/bin/bash
+              INSTANCE_ID=$(curl http://169.254.169.254/2014-11-05/meta-data/instance-id -s)
+              aws ec2 attach-network-interface --instance-id $INSTANCE_ID --network-interface-id ${NetworkInterface1} --device-index 1 --region ${AWS::Region}
+              /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource LaunchTemplate1 --region ${AWS::Region}
+              systemctl disable postfix
+              systemctl stop postfix
+              systemctl enable snat
+              systemctl start snat
+        IamInstanceProfile:
+          Name:
+            Ref: NatInstanceProfile
+        NetworkInterfaces:
+        - DeviceIndex: 0
+          AssociatePublicIpAddress: true
+          Groups:
+          - Ref: NatInstanceSecurityGroup
+        InstanceMarketOptions:
+          Fn::If:
+          - SpotEnabled
+          - MarketType: spot
+            SpotOptions:
+              SpotInstanceType: one-time
+          - Ref: AWS::NoValue
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          default:
+          - setup
+        setup:
+          files:
+            "/opt/snat.sh":
+              mode: '000755'
+              owner: root
+              group: root
+              content: |
+                #!/bin/bash -x
+
+                # wait for eth1
+                while ! ip link show dev eth1; do
+                  sleep 1
+                done
+
+                # enable IP forwarding and NAT
+                sysctl -q -w net.ipv4.ip_forward=1
+                sysctl -q -w net.ipv4.conf.eth1.send_redirects=0
+                iptables -t nat -A POSTROUTING -o eth1 -j MASQUERADE
+
+                # switch the default route to eth1
+                ip route del default dev eth0
+
+                # wait for network connection
+                curl --retry 10 http://www.example.com
+
+                # reestablish connections
+                systemctl restart amazon-ssm-agent.service
+            "/etc/systemd/system/snat.service":
+              mode: '000644'
+              owner: root
+              group: root
+              content: |
+                [Unit]
+                Description = SNAT via ENI eth1
+
+                [Service]
+                ExecStart = /opt/snat.sh
+                Type = oneshot
+
+                [Install]
+                WantedBy = multi-user.target
+  AutoScaleGroup1:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: CreateNatInstance1
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: '1'
+        MinInstancesInService: 0
+        SuspendProcesses:
+        - HealthCheck
+        - ReplaceUnhealthy
+        - AZRebalance
+        - AlarmNotification
+        - ScheduledActions
+      AutoScalingScheduledAction:
+        IgnoreUnmodifiedGroupSizeProperties: true
+    Properties:
+      DesiredCapacity: '1'
+      MinSize: '1'
+      MaxSize: '1'
+      VPCZoneIdentifier:
+      - Ref: SubnetPublic1
+      LaunchTemplate:
+        LaunchTemplateId:
+          Ref: LaunchTemplate1
+        Version:
+          Fn::GetAtt:
+          - LaunchTemplate1
+          - LatestVersionNumber
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-nat-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 1
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+        PropagateAtLaunch: false
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+        PropagateAtLaunch: false
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+        PropagateAtLaunch: false
+  RouteOutToInternet1ViaNatInstance:
+    Type: AWS::EC2::Route
+    Condition: CreateNatInstanceRoute1
+    Properties:
+      RouteTableId:
+        Ref: RouteTablePrivate1
+      DestinationCidrBlock: 0.0.0.0/0
+      NetworkInterfaceId:
+        Fn::If:
+        - CreateNatInstance1
+        - Ref: NetworkInterface1
+        - Ref: NetworkInterface0
+  RouteTablePrivate2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-private-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 2
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  NatIPAddress2:
+    Type: AWS::EC2::EIP
+    Condition: CreateNatGatewayEIP2
+    DependsOn:
+    - AttachGateway
+    Properties:
+      Domain: vpc
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-nat-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 2
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Condition: CreateManagedNat2
+    Properties:
+      AllocationId:
+        Fn::If:
+        - CreateNatGatewayEIP
+        - Fn::GetAtt:
+          - NatIPAddress2
+          - AllocationId
+        - Fn::Select:
+          - 2
+          - Fn::Split:
+            - ","
+            - Ref: NatGatewayEIPs
+      SubnetId:
+        Ref: SubnetPublic2
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-natgw-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 2
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  RouteOutToInternet2:
+    Type: AWS::EC2::Route
+    Condition: CreateManagedNatRoute2
+    Properties:
+      RouteTableId:
+        Ref: RouteTablePrivate2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Fn::If:
+        - CreateManagedNat2
+        - Ref: NatGateway2
+        - Ref: NatGateway0
+  NetworkInterface2:
+    Type: AWS::EC2::NetworkInterface
+    Condition: CreateNatInstance2
+    Properties:
+      SubnetId:
+        Ref: SubnetPublic2
+      SourceDestCheck: false
+      GroupSet:
+      - Ref: NatInstanceSecurityGroup
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-nat-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 2
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  EIPAssociation2:
+    Type: AWS::EC2::EIPAssociation
+    Condition: CreateNatInstance2
+    Properties:
+      AllocationId:
+        Fn::If:
+        - CreateNatGatewayEIP
+        - Fn::GetAtt:
+          - NatIPAddress2
+          - AllocationId
+        - Fn::Select:
+          - 2
+          - Fn::Split:
+            - ","
+            - Ref: NatGatewayEIPs
+      NetworkInterfaceId:
+        Ref: NetworkInterface2
+  LaunchTemplate2:
+    Type: AWS::EC2::LaunchTemplate
+    Condition: CreateNatInstance2
+    Properties:
+      LaunchTemplateData:
+        TagSpecifications:
+        - ResourceType: instance
+          Tags:
+          - Key: Name
+            Value:
+              Fn::Sub:
+              - "${EnvironmentName}-nat-${AZ}"
+              - AZ:
+                  Fn::Select:
+                  - 2
+                  - Fn::GetAZs:
+                      Ref: AWS::Region
+          - Key: EnvironmentType
+            Value:
+              Ref: EnvironmentType
+          - Key: Environment
+            Value:
+              Ref: EnvironmentName
+        - ResourceType: volume
+          Tags:
+          - Key: Name
+            Value:
+              Fn::Sub:
+              - "${EnvironmentName}-nat-${AZ}"
+              - AZ:
+                  Fn::Select:
+                  - 2
+                  - Fn::GetAZs:
+                      Ref: AWS::Region
+          - Key: EnvironmentType
+            Value:
+              Ref: EnvironmentType
+          - Key: Environment
+            Value:
+              Ref: EnvironmentName
+        ImageId: "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs"
+        InstanceType: t3.nano
+        UserData:
+          Fn::Base64:
+            Fn::Sub: |
+              #!/bin/bash
+              INSTANCE_ID=$(curl http://169.254.169.254/2014-11-05/meta-data/instance-id -s)
+              aws ec2 attach-network-interface --instance-id $INSTANCE_ID --network-interface-id ${NetworkInterface2} --device-index 1 --region ${AWS::Region}
+              /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource LaunchTemplate2 --region ${AWS::Region}
+              systemctl disable postfix
+              systemctl stop postfix
+              systemctl enable snat
+              systemctl start snat
+        IamInstanceProfile:
+          Name:
+            Ref: NatInstanceProfile
+        NetworkInterfaces:
+        - DeviceIndex: 0
+          AssociatePublicIpAddress: true
+          Groups:
+          - Ref: NatInstanceSecurityGroup
+        InstanceMarketOptions:
+          Fn::If:
+          - SpotEnabled
+          - MarketType: spot
+            SpotOptions:
+              SpotInstanceType: one-time
+          - Ref: AWS::NoValue
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          default:
+          - setup
+        setup:
+          files:
+            "/opt/snat.sh":
+              mode: '000755'
+              owner: root
+              group: root
+              content: |
+                #!/bin/bash -x
+
+                # wait for eth1
+                while ! ip link show dev eth1; do
+                  sleep 1
+                done
+
+                # enable IP forwarding and NAT
+                sysctl -q -w net.ipv4.ip_forward=1
+                sysctl -q -w net.ipv4.conf.eth1.send_redirects=0
+                iptables -t nat -A POSTROUTING -o eth1 -j MASQUERADE
+
+                # switch the default route to eth1
+                ip route del default dev eth0
+
+                # wait for network connection
+                curl --retry 10 http://www.example.com
+
+                # reestablish connections
+                systemctl restart amazon-ssm-agent.service
+            "/etc/systemd/system/snat.service":
+              mode: '000644'
+              owner: root
+              group: root
+              content: |
+                [Unit]
+                Description = SNAT via ENI eth1
+
+                [Service]
+                ExecStart = /opt/snat.sh
+                Type = oneshot
+
+                [Install]
+                WantedBy = multi-user.target
+  AutoScaleGroup2:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: CreateNatInstance2
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: '1'
+        MinInstancesInService: 0
+        SuspendProcesses:
+        - HealthCheck
+        - ReplaceUnhealthy
+        - AZRebalance
+        - AlarmNotification
+        - ScheduledActions
+      AutoScalingScheduledAction:
+        IgnoreUnmodifiedGroupSizeProperties: true
+    Properties:
+      DesiredCapacity: '1'
+      MinSize: '1'
+      MaxSize: '1'
+      VPCZoneIdentifier:
+      - Ref: SubnetPublic2
+      LaunchTemplate:
+        LaunchTemplateId:
+          Ref: LaunchTemplate2
+        Version:
+          Fn::GetAtt:
+          - LaunchTemplate2
+          - LatestVersionNumber
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-nat-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 2
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+        PropagateAtLaunch: false
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+        PropagateAtLaunch: false
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+        PropagateAtLaunch: false
+  RouteOutToInternet2ViaNatInstance:
+    Type: AWS::EC2::Route
+    Condition: CreateNatInstanceRoute2
+    Properties:
+      RouteTableId:
+        Ref: RouteTablePrivate2
+      DestinationCidrBlock: 0.0.0.0/0
+      NetworkInterfaceId:
+        Fn::If:
+        - CreateNatInstance2
+        - Ref: NetworkInterface2
+        - Ref: NetworkInterface0
+  SubnetPublic0:
+    Type: AWS::EC2::Subnet
+    Condition: CreateAvailabilityZone0
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Fn::Select:
+        - 0
+        - Fn::Cidr:
+          - Ref: vpcCIDR
+          - 16
+          - '8'
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      Tags:
+      - Key: Type
+        Value: public
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-public-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 0
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  RouteTableAssociationSubnetPublic0:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateAvailabilityZone0
+    Properties:
+      SubnetId:
+        Ref: SubnetPublic0
+      RouteTableId:
+        Ref: RouteTablePublic
+  ACLAssociationSubnetPublic0:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Condition: CreateAvailabilityZone0
+    Properties:
+      SubnetId:
+        Ref: SubnetPublic0
+      NetworkAclId:
+        Ref: NetworkAclPublic
+  SubnetPublic1:
+    Type: AWS::EC2::Subnet
+    Condition: CreateAvailabilityZone1
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Fn::Select:
+        - 1
+        - Fn::Cidr:
+          - Ref: vpcCIDR
+          - 16
+          - '8'
+      AvailabilityZone:
+        Fn::Select:
+        - 1
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      Tags:
+      - Key: Type
+        Value: public
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-public-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 1
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  RouteTableAssociationSubnetPublic1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateAvailabilityZone1
+    Properties:
+      SubnetId:
+        Ref: SubnetPublic1
+      RouteTableId:
+        Ref: RouteTablePublic
+  ACLAssociationSubnetPublic1:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Condition: CreateAvailabilityZone1
+    Properties:
+      SubnetId:
+        Ref: SubnetPublic1
+      NetworkAclId:
+        Ref: NetworkAclPublic
+  SubnetPublic2:
+    Type: AWS::EC2::Subnet
+    Condition: CreateAvailabilityZone2
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Fn::Select:
+        - 2
+        - Fn::Cidr:
+          - Ref: vpcCIDR
+          - 16
+          - '8'
+      AvailabilityZone:
+        Fn::Select:
+        - 2
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      Tags:
+      - Key: Type
+        Value: public
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-public-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 2
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  RouteTableAssociationSubnetPublic2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateAvailabilityZone2
+    Properties:
+      SubnetId:
+        Ref: SubnetPublic2
+      RouteTableId:
+        Ref: RouteTablePublic
+  ACLAssociationSubnetPublic2:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Condition: CreateAvailabilityZone2
+    Properties:
+      SubnetId:
+        Ref: SubnetPublic2
+      NetworkAclId:
+        Ref: NetworkAclPublic
+  SubnetCompute0:
+    Type: AWS::EC2::Subnet
+    Condition: CreateAvailabilityZone0
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Fn::Select:
+        - 4
+        - Fn::Cidr:
+          - Ref: vpcCIDR
+          - 16
+          - '8'
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-compute-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 0
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  RouteTableAssociationSubnetCompute0:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateAvailabilityZone0
+    Properties:
+      SubnetId:
+        Ref: SubnetCompute0
+      RouteTableId:
+        Ref: RouteTablePrivate0
+  ACLAssociationSubnetCompute0:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Condition: CreateAvailabilityZone0
+    Properties:
+      SubnetId:
+        Ref: SubnetCompute0
+      NetworkAclId:
+        Ref: NetworkAclPrivate
+  SubnetCompute1:
+    Type: AWS::EC2::Subnet
+    Condition: CreateAvailabilityZone1
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Fn::Select:
+        - 5
+        - Fn::Cidr:
+          - Ref: vpcCIDR
+          - 16
+          - '8'
+      AvailabilityZone:
+        Fn::Select:
+        - 1
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-compute-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 1
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  RouteTableAssociationSubnetCompute1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateAvailabilityZone1
+    Properties:
+      SubnetId:
+        Ref: SubnetCompute1
+      RouteTableId:
+        Ref: RouteTablePrivate1
+  ACLAssociationSubnetCompute1:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Condition: CreateAvailabilityZone1
+    Properties:
+      SubnetId:
+        Ref: SubnetCompute1
+      NetworkAclId:
+        Ref: NetworkAclPrivate
+  SubnetCompute2:
+    Type: AWS::EC2::Subnet
+    Condition: CreateAvailabilityZone2
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Fn::Select:
+        - 6
+        - Fn::Cidr:
+          - Ref: vpcCIDR
+          - 16
+          - '8'
+      AvailabilityZone:
+        Fn::Select:
+        - 2
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-compute-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 2
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  RouteTableAssociationSubnetCompute2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateAvailabilityZone2
+    Properties:
+      SubnetId:
+        Ref: SubnetCompute2
+      RouteTableId:
+        Ref: RouteTablePrivate2
+  ACLAssociationSubnetCompute2:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Condition: CreateAvailabilityZone2
+    Properties:
+      SubnetId:
+        Ref: SubnetCompute2
+      NetworkAclId:
+        Ref: NetworkAclPrivate
+  SubnetPersistence0:
+    Type: AWS::EC2::Subnet
+    Condition: CreateAvailabilityZone0
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Fn::Select:
+        - 8
+        - Fn::Cidr:
+          - Ref: vpcCIDR
+          - 16
+          - '8'
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-persistence-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 0
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  RouteTableAssociationSubnetPersistence0:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateAvailabilityZone0
+    Properties:
+      SubnetId:
+        Ref: SubnetPersistence0
+      RouteTableId:
+        Ref: RouteTablePrivate0
+  ACLAssociationSubnetPersistence0:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Condition: CreateAvailabilityZone0
+    Properties:
+      SubnetId:
+        Ref: SubnetPersistence0
+      NetworkAclId:
+        Ref: NetworkAclPrivate
+  SubnetPersistence1:
+    Type: AWS::EC2::Subnet
+    Condition: CreateAvailabilityZone1
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Fn::Select:
+        - 9
+        - Fn::Cidr:
+          - Ref: vpcCIDR
+          - 16
+          - '8'
+      AvailabilityZone:
+        Fn::Select:
+        - 1
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-persistence-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 1
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  RouteTableAssociationSubnetPersistence1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateAvailabilityZone1
+    Properties:
+      SubnetId:
+        Ref: SubnetPersistence1
+      RouteTableId:
+        Ref: RouteTablePrivate1
+  ACLAssociationSubnetPersistence1:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Condition: CreateAvailabilityZone1
+    Properties:
+      SubnetId:
+        Ref: SubnetPersistence1
+      NetworkAclId:
+        Ref: NetworkAclPrivate
+  SubnetPersistence2:
+    Type: AWS::EC2::Subnet
+    Condition: CreateAvailabilityZone2
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Fn::Select:
+        - 10
+        - Fn::Cidr:
+          - Ref: vpcCIDR
+          - 16
+          - '8'
+      AvailabilityZone:
+        Fn::Select:
+        - 2
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-persistence-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 2
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  RouteTableAssociationSubnetPersistence2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateAvailabilityZone2
+    Properties:
+      SubnetId:
+        Ref: SubnetPersistence2
+      RouteTableId:
+        Ref: RouteTablePrivate2
+  ACLAssociationSubnetPersistence2:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Condition: CreateAvailabilityZone2
+    Properties:
+      SubnetId:
+        Ref: SubnetPersistence2
+      NetworkAclId:
+        Ref: NetworkAclPrivate
+  SubnetCache0:
+    Type: AWS::EC2::Subnet
+    Condition: CreateAvailabilityZone0
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Fn::Select:
+        - 12
+        - Fn::Cidr:
+          - Ref: vpcCIDR
+          - 16
+          - '8'
+      AvailabilityZone:
+        Fn::Select:
+        - 0
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-cache-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 0
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  RouteTableAssociationSubnetCache0:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateAvailabilityZone0
+    Properties:
+      SubnetId:
+        Ref: SubnetCache0
+      RouteTableId:
+        Ref: RouteTablePrivate0
+  ACLAssociationSubnetCache0:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Condition: CreateAvailabilityZone0
+    Properties:
+      SubnetId:
+        Ref: SubnetCache0
+      NetworkAclId:
+        Ref: NetworkAclPrivate
+  SubnetCache1:
+    Type: AWS::EC2::Subnet
+    Condition: CreateAvailabilityZone1
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Fn::Select:
+        - 13
+        - Fn::Cidr:
+          - Ref: vpcCIDR
+          - 16
+          - '8'
+      AvailabilityZone:
+        Fn::Select:
+        - 1
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-cache-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 1
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  RouteTableAssociationSubnetCache1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateAvailabilityZone1
+    Properties:
+      SubnetId:
+        Ref: SubnetCache1
+      RouteTableId:
+        Ref: RouteTablePrivate1
+  ACLAssociationSubnetCache1:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Condition: CreateAvailabilityZone1
+    Properties:
+      SubnetId:
+        Ref: SubnetCache1
+      NetworkAclId:
+        Ref: NetworkAclPrivate
+  SubnetCache2:
+    Type: AWS::EC2::Subnet
+    Condition: CreateAvailabilityZone2
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Fn::Select:
+        - 14
+        - Fn::Cidr:
+          - Ref: vpcCIDR
+          - 16
+          - '8'
+      AvailabilityZone:
+        Fn::Select:
+        - 2
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      Tags:
+      - Key: Type
+        Value: private
+      - Key: Name
+        Value:
+          Fn::Sub:
+          - "${EnvironmentName}-cache-${AZ}"
+          - AZ:
+              Fn::Select:
+              - 2
+              - Fn::GetAZs:
+                  Ref: AWS::Region
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+  RouteTableAssociationSubnetCache2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateAvailabilityZone2
+    Properties:
+      SubnetId:
+        Ref: SubnetCache2
+      RouteTableId:
+        Ref: RouteTablePrivate2
+  ACLAssociationSubnetCache2:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Condition: CreateAvailabilityZone2
+    Properties:
+      SubnetId:
+        Ref: SubnetCache2
+      NetworkAclId:
+        Ref: NetworkAclPrivate
+  S3VpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId:
+        Ref: VPC
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal: "*"
+          Action:
+          - s3:*
+          Resource:
+          - arn:aws:s3:::*
+      ServiceName:
+        Fn::Sub: com.amazonaws.${AWS::Region}.s3
+      RouteTableIds:
+      - Ref: RouteTablePrivate0
+      - Ref: RouteTablePrivate1
+      - Ref: RouteTablePrivate2
+  DynamodbVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId:
+        Ref: VPC
+      ServiceName:
+        Fn::Sub: com.amazonaws.${AWS::Region}.dynamodb
+      RouteTableIds:
+      - Ref: RouteTablePrivate0
+      - Ref: RouteTablePrivate1
+      - Ref: RouteTablePrivate2
+  VGW:
+    Type: AWS::EC2::VPNGateway
+    Condition: DoEnableTransitVPC
+    Properties:
+      Type: ipsec.1
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: "${EnvironmentName}-VGW"
+      - Key: transitvpc:spoke
+        Value: 'false'
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  AttachVGWToVPC:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Condition: DoEnableTransitVPC
+    Properties:
+      VpcId:
+        Ref: VPC
+      VpnGatewayId:
+        Ref: VGW
+  PropagateRoute:
+    Type: AWS::EC2::VPNGatewayRoutePropagation
+    Condition: DoEnableTransitVPC
+    DependsOn:
+    - AttachVGWToVPC
+    Properties:
+      RouteTableIds:
+      - Ref: RouteTablePrivate0
+      - Ref: RouteTablePrivate1
+      - Ref: RouteTablePrivate2
+      VpnGatewayId:
+        Ref: VGW
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Condition: CreateZone
+    Properties:
+      Name:
+        Fn::Sub: "${EnvironmentName}.${RootDomainName}"
+      HostedZoneConfig:
+        Comment:
+          Fn::Sub: Hosted Zone for ${EnvironmentName}
+      HostedZoneTags:
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+  NSRecords:
+    Type: AWS::Route53::RecordSet
+    Condition: LocalNSRecords
+    Properties:
+      HostedZoneName:
+        Fn::Join:
+        - ''
+        - - Ref: RootDomainName
+          - "."
+      Comment:
+        Fn::Join:
+        - ''
+        - - Fn::Sub: "${EnvironmentName} - NS Records for ${EnvironmentName}."
+          - Fn::Join:
+            - ''
+            - - Ref: RootDomainName
+              - "."
+      Name:
+        Fn::Sub: "${EnvironmentName}.${RootDomainName}"
+      Type: NS
+      TTL: 60
+      ResourceRecords:
+        Fn::GetAtt:
+        - HostedZone
+        - NameServers
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName:
+        Fn::Sub: "${EnvironmentName}-services"
+      ClusterSettings:
+      - Name: containerInsights
+        Value: disabled
+      Configuration:
+        ExecuteCommandConfiguration:
+          Logging: DEFAULT
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: "${EnvironmentName}-ecs"
+      - Key: Environment
+        Value:
+          Ref: EnvironmentName
+      - Key: EnvironmentType
+        Value:
+          Ref: EnvironmentType
+Parameters:
+  MaxNatGateways:
+    Type: String
+    Default: '1'
+    NoEcho: false
+  NatGatewayEIPs:
+    Type: String
+    Default: ''
+    NoEcho: false
+  RootDomainName:
+    Type: String
+    Default: ''
+    NoEcho: false
+  EnvironmentName:
+    Type: String
+    Default: dev
+    NoEcho: false
+  EnvironmentType:
+    Type: String
+    Default: development
+    NoEcho: false
+    AllowedValues:
+    - development
+    - production
+  DnsDomain:
+    Type: String
+    Default: ''
+    NoEcho: false
+    Description: the root zone used to create the route53 hosted zone
+  vpcCIDR:
+    Type: String
+    Default: 10.0.0.0/16
+    NoEcho: false
+    Description: override the default vpc cidr in the config
+Description: Main VPC Stack - (main@latest)
+Outputs:
+  CfTemplateUrl:
+    Value: "/main.compiled.yaml"
+  CfTemplateVersion:
+    Value: latest
+  VPCId:
+    Value:
+      Ref: VPC
+    Export:
+      Name:
+        Fn::Sub: "${EnvironmentName}-vpc-VPCId"
+  VPCCidr:
+    Value:
+      Fn::GetAtt:
+      - VPC
+      - CidrBlock
+    Export:
+      Name:
+        Fn::Sub: "${EnvironmentName}-vpc-VPCCidr"
+  DefaultSecurityGroup:
+    Value:
+      Fn::GetAtt:
+      - VPC
+      - DefaultSecurityGroup
+    Export:
+      Name:
+        Fn::Sub: "${EnvironmentName}-vpc-DefaultSecurityGroup"
+  PublicRouteTableIds:
+    Value:
+      Ref: RouteTablePublic
+    Export:
+      Name:
+        Fn::Sub: "${EnvironmentName}-vpc-PublicRouteTableIds"
+  PrivateRouteTableIds:
+    Value:
+      Fn::Join:
+      - ","
+      - - Ref: RouteTablePrivate0
+        - Ref: RouteTablePrivate1
+        - Ref: RouteTablePrivate2
+    Export:
+      Name:
+        Fn::Sub: "${EnvironmentName}-vpc-PrivateRouteTableIds"
+  PublicSubnets:
+    Value:
+      Fn::Join:
+      - ","
+      - Fn::If:
+        - CreateAvailabilityZone2
+        - - Ref: SubnetPublic0
+          - Ref: SubnetPublic1
+          - Ref: SubnetPublic2
+        - Fn::If:
+          - CreateAvailabilityZone1
+          - - Ref: SubnetPublic0
+            - Ref: SubnetPublic1
+          - Fn::If:
+            - CreateAvailabilityZone0
+            - - Ref: SubnetPublic0
+            - ''
+    Export:
+      Name:
+        Fn::Sub: "${EnvironmentName}-vpc-PublicSubnets"
+  ComputeSubnets:
+    Value:
+      Fn::Join:
+      - ","
+      - Fn::If:
+        - CreateAvailabilityZone2
+        - - Ref: SubnetCompute0
+          - Ref: SubnetCompute1
+          - Ref: SubnetCompute2
+        - Fn::If:
+          - CreateAvailabilityZone1
+          - - Ref: SubnetCompute0
+            - Ref: SubnetCompute1
+          - Fn::If:
+            - CreateAvailabilityZone0
+            - - Ref: SubnetCompute0
+            - ''
+    Export:
+      Name:
+        Fn::Sub: "${EnvironmentName}-vpc-ComputeSubnets"
+  PersistenceSubnets:
+    Value:
+      Fn::Join:
+      - ","
+      - Fn::If:
+        - CreateAvailabilityZone2
+        - - Ref: SubnetPersistence0
+          - Ref: SubnetPersistence1
+          - Ref: SubnetPersistence2
+        - Fn::If:
+          - CreateAvailabilityZone1
+          - - Ref: SubnetPersistence0
+            - Ref: SubnetPersistence1
+          - Fn::If:
+            - CreateAvailabilityZone0
+            - - Ref: SubnetPersistence0
+            - ''
+    Export:
+      Name:
+        Fn::Sub: "${EnvironmentName}-vpc-PersistenceSubnets"
+  CacheSubnets:
+    Value:
+      Fn::Join:
+      - ","
+      - Fn::If:
+        - CreateAvailabilityZone2
+        - - Ref: SubnetCache0
+          - Ref: SubnetCache1
+          - Ref: SubnetCache2
+        - Fn::If:
+          - CreateAvailabilityZone1
+          - - Ref: SubnetCache0
+            - Ref: SubnetCache1
+          - Fn::If:
+            - CreateAvailabilityZone0
+            - - Ref: SubnetCache0
+            - ''
+    Export:
+      Name:
+        Fn::Sub: "${EnvironmentName}-vpc-CacheSubnets"
+  S3VPCEndpointId:
+    Value:
+      Ref: S3VpcEndpoint
+    Export:
+      Name:
+        Fn::Sub: "${EnvironmentName}-vpc-S3VPCEndpointId"
+  DynamodbVPCEndpointId:
+    Value:
+      Ref: DynamodbVpcEndpoint
+    Export:
+      Name:
+        Fn::Sub: "${EnvironmentName}-vpc-DynamodbVPCEndpointId"
+  vpcCfTemplateVersion:
+    Value: latest
+  DnsDomainZoneId:
+    Condition: CreateZone
+    Value:
+      Ref: HostedZone
+  dnsCfTemplateVersion:
+    Value: latest
+  EcsCluster:
+    Value:
+      Ref: EcsCluster
+    Export:
+      Name:
+        Fn::Sub: "${EnvironmentName}-ecs-EcsCluster"
+  EcsClusterArn:
+    Value:
+      Fn::GetAtt:
+      - EcsCluster
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: "${EnvironmentName}-ecs-EcsClusterArn"
+  ecsCfTemplateVersion:
+    Value: latest
+Conditions:
+  CreateNatGatewayEIP:
+    Fn::And:
+    - Fn::Equals:
+      - Fn::Join:
+        - ''
+        - Fn::Split:
+          - ","
+          - Ref: NatGatewayEIPs
+      - ''
+    - Fn::Not:
+      - Condition: NatDisabled
+  SpotEnabled:
+    Fn::Equals:
+    - 'false'
+    - 'true'
+  ManagedNat:
+    Fn::Equals:
+    - managed
+    - managed
+  NatInstance:
+    Fn::Equals:
+    - managed
+    - instances
+  NatDisabled:
+    Fn::Equals:
+    - managed
+    - disabled
+  CreateAvailabilityZone0:
+    Fn::Or:
+    - Fn::Equals:
+      - '3'
+      - 1
+    - Fn::Equals:
+      - '3'
+      - 2
+    - Fn::Equals:
+      - '3'
+      - 3
+  CreateManagedNat0:
+    Fn::And:
+    - Condition: CreateAvailabilityZone0
+    - Condition: ManagedNat
+    - Fn::Or:
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 1
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 2
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 3
+  CreateNatInstance0:
+    Fn::And:
+    - Condition: CreateAvailabilityZone0
+    - Condition: NatInstance
+    - Fn::Or:
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 1
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 2
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 3
+  CreateManagedNatRoute0:
+    Fn::And:
+    - Condition: CreateAvailabilityZone0
+    - Condition: ManagedNat
+  CreateNatInstanceRoute0:
+    Fn::And:
+    - Condition: CreateAvailabilityZone0
+    - Condition: NatInstance
+  CreateNatGatewayEIP0:
+    Fn::And:
+    - Condition: CreateAvailabilityZone0
+    - Condition: CreateNatGatewayEIP
+    - Fn::Or:
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 1
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 2
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 3
+  CreateAvailabilityZone1:
+    Fn::Or:
+    - Fn::Equals:
+      - '3'
+      - 2
+    - Fn::Equals:
+      - '3'
+      - 3
+  CreateManagedNat1:
+    Fn::And:
+    - Condition: CreateAvailabilityZone1
+    - Condition: ManagedNat
+    - Fn::Or:
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 2
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 3
+  CreateNatInstance1:
+    Fn::And:
+    - Condition: CreateAvailabilityZone1
+    - Condition: NatInstance
+    - Fn::Or:
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 2
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 3
+  CreateManagedNatRoute1:
+    Fn::And:
+    - Condition: CreateAvailabilityZone1
+    - Condition: ManagedNat
+  CreateNatInstanceRoute1:
+    Fn::And:
+    - Condition: CreateAvailabilityZone1
+    - Condition: NatInstance
+  CreateNatGatewayEIP1:
+    Fn::And:
+    - Condition: CreateAvailabilityZone1
+    - Condition: CreateNatGatewayEIP
+    - Fn::Or:
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 2
+      - Fn::Equals:
+        - Ref: MaxNatGateways
+        - 3
+  CreateAvailabilityZone2:
+    Fn::Equals:
+    - '3'
+    - 3
+  CreateManagedNat2:
+    Fn::And:
+    - Condition: CreateAvailabilityZone2
+    - Condition: ManagedNat
+    - Fn::Equals:
+      - Ref: MaxNatGateways
+      - 3
+  CreateNatInstance2:
+    Fn::And:
+    - Condition: CreateAvailabilityZone2
+    - Condition: NatInstance
+    - Fn::Equals:
+      - Ref: MaxNatGateways
+      - 3
+  CreateManagedNatRoute2:
+    Fn::And:
+    - Condition: CreateAvailabilityZone2
+    - Condition: ManagedNat
+  CreateNatInstanceRoute2:
+    Fn::And:
+    - Condition: CreateAvailabilityZone2
+    - Condition: NatInstance
+  CreateNatGatewayEIP2:
+    Fn::And:
+    - Condition: CreateAvailabilityZone2
+    - Condition: CreateNatGatewayEIP
+    - Fn::Equals:
+      - Ref: MaxNatGateways
+      - 3
+  DoEnableTransitVPC:
+    Fn::Equals:
+    - 'false'
+    - 'true'
+  LocalNSRecords:
+    Fn::And:
+    - Fn::Equals:
+      - 'true'
+      - 'true'
+    - Fn::Equals:
+      - ''
+      - ''
+  RemoteNSRecords:
+    Fn::And:
+    - Fn::Equals:
+      - 'true'
+      - 'true'
+    - Fn::Not:
+      - Fn::Equals:
+        - ''
+        - ''
+  CreateZone:
+    Fn::Equals:
+    - 'true'
+    - 'true'
