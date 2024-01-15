@@ -4,6 +4,7 @@ require 'yaml'
 def extract_github_info(url)
     if ENV['GITHUB_ORG_NAME'] && ENV['GITHUB_REPO_NAME']
       return { organization: ENV['GITHUB_ORG_NAME'], repository: ENV['GITHUB_REPO_NAME'] }
+    end
     
     # Regular expression to match GitHub HTTP URL with optional .git at the end
     github_url_regex = %r{https?://github\.com/(.+)/(.+)\.git?}
