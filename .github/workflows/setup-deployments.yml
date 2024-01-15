@@ -16,7 +16,11 @@ jobs:
       with:
         ref: ${{ github.head_ref }}
         fetch-depth: 0
-    - run: make setup-deployments
+    - name: create deployment files
+      env:
+        GITHUB_ORG_NAME: ${{ git.repository_owner }}
+        GITHUB_REPO_NAME: ${{ git.repository }}
+      run: make setup-deployments
     - uses: EndBug/add-and-commit@v9
       with:
         message: adds deployment stacks templates and deployment config files
