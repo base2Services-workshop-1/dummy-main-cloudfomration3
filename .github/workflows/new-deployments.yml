@@ -3,7 +3,7 @@ name: new-deployments
 on:
   pull_request:
     paths:
-      - 'stacks/**/*.stack.yaml'
+      - 'stacks/environments/**/*.stack.yaml'
 
 jobs:
   new-deployments:

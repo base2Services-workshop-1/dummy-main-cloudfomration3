@@ -22,7 +22,7 @@ def extract_github_info(url)
     end
 end
 
-stacks_dir = File.dirname(__FILE__) + '/stacks'
+stacks_dir = 'stacks'
 environments = YAML.load(File.read(File.join(stacks_dir, 'environments.yaml')))
 deployer_file_name = "cfn-sync.stack.yaml"
 deployments_file_name = "cfn-sync-deployments.yaml"
@@ -63,7 +63,39 @@ task :new_deployments do |t|
     # TODO - add logic scan environments dir for stacks and for each environment/region add a
     # CfnGitSync::Stack resouce to the matching cfn-sync.stack.yaml file use the file name as
     # the stack name with environment name prefix
-    puts "Adding new Deployments"
+
+    deployment_files = Dir.glob(File.join("#{stacks_dir}/environments", '**', '*.yaml'))
+    deployment_files.each do |file|
+      next if file.end_with?(deployer_file_name)
+      environment_name = file.split('/')[2]
+      environment_region = file.split('/')[3]
+      stack_name = file.split('/')[4].gsub('.stack.yaml','')
+      resource_name = "#{environment_name.capitalize}#{stack_name.capitalize}Stack"
+      new_stack = nil
+      deployment_file_name = "#{stacks_dir}/deployments/#{environment_name}/#{environment_region}/#{deployments_file_name}"
+      
+      deployment = YAML.load(File.read(deployment_file_name))
+      deployment['Resources'].each do |name, resource|
+        next if deployment['Resources'].has_key?(resource_name)
+        puts "Adding new Deployments in #{environment_name} and #{environment_region} for #{stack_name} stack"
+        new_stack = {
+          "Type" => 'CfnGitSync::Stack',
+          "Properties" => {
+            "RepositoryOwner" => '!Ref RepositoryOwner',
+            "RepositoryName" => '!Ref RepositoryName',
+            "BranchName" => 'main',
+            "StackName" => "#{environment_name}-#{stack_name}",
+            "StackDeploymentFile" => file
+          }
+        }
+      end
+      if new_stack.nil?
+        puts "Stack #{stack_name} in environment:#{environment_name}, region:#{environment_region} already exists in #{deployment_file_name}"
+      else
+        deployment['Resources'][resource_name] = new_stack
+        File.write(deployment_file_name, YAML.dump(deployment))
+      end
+    end
 end
 
 
