@@ -20,8 +20,8 @@ build: ./*.cfhighlander.rb
 
 .PHONY: setup-deployments
 setup-deployments:
-	rake setup_deployments
+	rake deployments:setup
 
 .PHONY: new-deployments
 new-deployments:
-	rake new_deployments
+	rake deployments:new
