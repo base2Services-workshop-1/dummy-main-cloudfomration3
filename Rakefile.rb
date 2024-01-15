@@ -2,6 +2,10 @@ require 'bundler/setup'
 require 'yaml'
 
 def extract_github_info(url)
+    if ENV['GITHUB_ORG_NAME'] && ENV['GITHUB_REPO_NAME']
+      return { organization: ENV['GITHUB_ORG_NAME'], repository: ENV['GITHUB_REPO_NAME'] }
+    end
+    
     # Regular expression to match GitHub HTTP URL with optional .git at the end
     github_url_regex = %r{https?://github\.com/(.+)/(.+)\.git?}
   
@@ -59,7 +63,7 @@ task :new_deployments do |t|
     # TODO - add logic scan environments dir for stacks and for each environment/region add a
     # CfnGitSync::Stack resouce to the matching cfn-sync.stack.yaml file use the file name as
     # the stack name with environment name prefix
-    
+    puts "Adding new Deployments"
 end
 
 

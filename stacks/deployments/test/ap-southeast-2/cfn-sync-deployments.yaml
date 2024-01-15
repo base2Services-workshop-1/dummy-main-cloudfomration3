@@ -1,0 +1,31 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: CfnGitSync
+
+Parameters:
+  RepositoryOwner:
+    Type: String
+  RepositoryName:
+    Type String
+
+Resources:
+  InitialPlaceholder:
+    Type: AWS::CloudFormation::WaitConditionHandle
+
+  # To Deploy additional stacks add the CfnGitSync::Stack resource to this template and create a deployment config file in the stacks/environments directory
+  # Example
+  # DevMainStack:
+  #   Type: CfnGitSync::Stack
+  #   Properties:
+  #     RepositoryOwner: !Ref RepositoryOwner
+  #     RepositoryName: !Ref RepositoryName
+  #     BranchName: main
+  #     StackName: dev-main
+  #     StackDeploymentFile: stacks/environments/dev/main.stack.yaml
+
+  # and create the file stacks/environments/dev/main.stack.yaml
+  # template-file-path: ./stacks/templates/cfn-stack-deployer.yaml
+
+  # parameters:
+  #   RepositoryOwner: REPLACEME
+  #   RepositoryName: REPLACEME
+      
