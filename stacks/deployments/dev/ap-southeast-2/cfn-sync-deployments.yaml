@@ -8,3 +8,11 @@ Parameters:
 Resources:
   InitialPlaceholder:
     Type: AWS::CloudFormation::WaitConditionHandle
+  DevMainStack:
+    Type: CfnGitSync::Stack
+    Properties:
+      RepositoryOwner: "!Ref RepositoryOwner"
+      RepositoryName: "!Ref RepositoryName"
+      BranchName: main
+      StackName: dev-main
+      StackDeploymentFile: stacks/environments/dev/ap-southeast-2/main.stack.yaml

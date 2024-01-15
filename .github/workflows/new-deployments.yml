@@ -3,7 +3,7 @@ name: new-deployments
 on:
   pull_request:
     paths:
-      - 'stacks/environments/**/*.stack.yaml'
+      - 'stacks/**/*.stack.yaml'
 
 jobs:
   new-deployments:
@@ -16,7 +16,11 @@ jobs:
       with:
         ref: ${{ github.head_ref }}
         fetch-depth: 0
-    - run: make new-deployments
+    - name: add deployment
+      env:
+        GITHUB_ORG_NAME: ${{ github.repository_owner }}
+        GITHUB_REPO_NAME: ${{ github.repository }}
+      run: make new-deployments
     - uses: EndBug/add-and-commit@v9
       with:
         message: adds deployment stacks templates and deployment config files
