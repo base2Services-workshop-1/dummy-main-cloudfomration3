@@ -18,8 +18,8 @@ jobs:
         fetch-depth: 0
     - name: add deployment
       env:
-        GITHUB_ORG_NAME: ${{ git.repository_owner }}
-        GITHUB_REPO_NAME: ${{ git.repository }}
+        GITHUB_ORG_NAME: ${{ github.repository_owner }}
+        GITHUB_REPO_NAME: ${{ github.repository }}
       run: make new-deployments
     - uses: EndBug/add-and-commit@v9
       with:
