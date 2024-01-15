@@ -1,0 +1,6 @@
+
+template-file-path: ./stacks/deployments/test/us-west-2/cfn-sync-deployments.yaml
+
+parameters:
+  RepositoryOwner: base2Services-workshop-1
+  RepositoryName: base2Services-workshop-1/dummy-main-cloudfomration3
